@@ -1,6 +1,6 @@
 import requests
 
-Header_Rules = {
+HEADER_RULES = {
     "Strict-Transport-Security": {
         "severity": "Medium",
         "impact": "Browsers are not told to always use HTTPS, so a first visit could be downgraded to HTTP.",
@@ -12,17 +12,17 @@ Header_Rules = {
         "fix": "Define a Content-Security-Policy, starting with default-src 'self' and adding what the site only needs",
     },
     "X-Frame-Options": {
-        "severity": "low",
+        "severity": "Low",
         "impact": "Other sites may be able to show this page in a hidden frame (clickjacking).",
         "fix": "Add: X-Frame-Options: DENY (or use CSP frame-ancestors)",
     },
     "X-Content-Type-Options": {
-        "severity": "low",
+        "severity": "Low",
         "impact": "Browsers may try to guess the content type of a file, which can make a harmless file run as a script.",
         "fix": "Add: X-Content-Type-Options: nosniff",
     },
     "Referrer-Policy": {
-        "severity": "low",
+        "severity": "Low",
         "impact": "Full page addresses may be shared with other sites",
         "fix": "Add: Referrer-Policy: no-referrer (or use strict-origin-when-cross-origin)",
     },
@@ -55,7 +55,7 @@ if response is not None:
 def check_security_headers(headers):
     findings = []
     csp = headers.get("Content-Security-Policy")
-    for name, rule in Header_Rules.items():
+    for name, rule in HEADER_RULES.items():
         if name in headers: 
             continue
         if name == "X-Frame-Options" and csp and "frame-ancestors" in csp:
