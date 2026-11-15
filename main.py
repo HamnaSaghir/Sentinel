@@ -1,5 +1,32 @@
 import requests
+Header_Rules={
+    "Strict-Transport-Secuirty":{
+        "severity":"Medium",
+        "impact": "Browsers are not told to always use HTTPS, so a first visit could be downgraded to HTTP.",
+        "fix" : " Add: Strixt-Transport-Security : max-age=31536000: includeSubDomains",
+    },
+    "Content-Security-Policy":{
+        "severity":"Medium",
+        "impact": "Browser has no rules about which scripts and resources may load which makes script injection easier.",
+        "fix":" Define a Content-Secuirty-Policy, starting with default-src 'self' and adding what the site only needs",
+    },
+    "X-Frame-Options":{
+        "severity":"low",
+        "impact": "Other sites may be able to show this page in a hidden frame(clickjacking).",
+        "fix":" Add: X-Frame-Options: DENY (or use CSp frame-ancestors)",
+    },
+    "X-Content-Type-Options":{
+        "severity":"low",
+        "impact": "Browsers may try to guess the content type of a file, which can make a harmless file run as a script.",
+        "fix":" Add: X-Content-Type-Options: nosniff",
+    },
+    "Referrer-Policy":{
+        "severity":"low",
+        "impact": "Full page addresses may be shared with other sites",
+        "fix":" Add: Referrer-Policy: no-referrer (or use strict-origin-when-cross-origin)",
+    },
 
+}
 def fetch(url):
     try:
         response = requests.get(url, timeout=10)
@@ -26,20 +53,29 @@ if response is not None:
   
 
 def check_security_headers(headers):
-    required=[
-        "Strict-Transport-Security",
-        "Content-Security-Policy",
-        "X-Frame-Options",
-        "X-Content-Type-Options",
-        "Referrer-Policy",
-    ]
-    results=[]
-    for name in required:
-        results.append({"header":name,"present":name in headers})
-    return results
-results = check_security_headers(response.headers)
-for item in results:
-    if item["present"]:
-        print("PRESENT:", item["header"])
-    else:
-        print("MISSING:", item["header"])
+    findings=[]
+    csp=headers.get("Content-Security-Policy")
+    for name, rule in Header_Rules.items():
+        if name in headers: 
+            continue
+        if name =="X-Frame-Options" and "frfame-ancestors" in csp:
+            continue
+        findings.append({
+            "issue":"Missing" + name,
+            "severity":rule["severity"]
+            "evidence": "The responce did not contains a " + name + "header.",
+            "fix": rule["fix"],
+        })
+        return findings
+    
+findings= check_security_headers(response.headers)
+if not findings:
+    print("No missing security headers found.")
+for f in findings:
+    print()
+    print("["+f["severity"+"]",f["issue"]]
+    print("Evidence:",f["evidence"])
+    print("Impact": f["impact"])
+    print("Fix:", f["fix"])
+          
+          )
