@@ -1,6 +1,6 @@
 import requests
 
-HEADER_RULES = {
+HEADER_RULES = { ##owasp and MDN secure headers project 
     "Strict-Transport-Security": {
         "severity": "Medium",
         "impact": "Browsers are not told to always use HTTPS, so a first visit could be downgraded to HTTP.",
@@ -78,3 +78,5 @@ for f in findings:
     print("Impact:", f["impact"])
     print("Evidence:", f["evidence"])
     print("Fix:", f["fix"])
+fake = {"Content-Security-Policy": "frame-ancestors 'none'"}
+print(check_security_headers(fake))
