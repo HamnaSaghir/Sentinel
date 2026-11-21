@@ -1,8 +1,11 @@
 import requests
+import socket
+import ssl
+import time
 from urllib.parse import urlparse
 
 ONE_YEAR = 31536000
-SEVERITY_ORDER = {"High": 0, "Medium": 1, "Low": 2}
+SEVERITY_ORDER = {"High": 0, "Medium": 1, "Low": 2, "Info":3}
 SESSION_HINTS = ["sess", "sid", "token", "auth"]
 
 HEADER_RULES = {
@@ -157,21 +160,80 @@ def check_cookies(cookie_lines):
                 "Add SameSite=Lax (or Strict) to this cookie.",
             ))
     return findings
-def run_scan(url):
-    response = fetch(url)
-    if response is None:
-        print("Scan stopped: could not reach the site.")
-        return
+def get_tls_details(hostname,port):
+    context = ssl.create_default_context()
+    with socket.create_connection((hostname,port),timeout=10)as sock :
+        with context.wrap_socket(sock,server_hostname=hostname) as tls:
+            return tls.getpeercert(), tls.version()
+def check_tls(url):
+    parsed = urlparse(url)
+    if parsed.scheme!="https":
+        return [make_finding(
+            "Site is served over HTTP",
+            "Medium",
+            "The final adress was " + url,
+            "Traffic between the visitor and the site is not encrypted.",
+            "Serve the site over HTTPS and redirect HTTP to HTTPS",
+        )]
+    hostname = parsed.hostname
+    port= parsed.port or 443
+    try: 
+        cert, version = get_tls_details(hostname,port)
+    except ssl.SSLCertVerificationError as e:
+        return [make_finding(
+            "TLS certificate failed verification",
+            "High",
+            "Python could not verify the certificate : "+ str(e.verify_message),
+            "Browsers will show a warning, and visitors cannot be sure who they are talking to.",
+            "INstall a valid certificate from a trusted authority for this domain."
+        )]
+    except OSError as e:
+        return [make_finding(
+            "Could not complete a TLS connection",
+            "Medium",
+            "The connection failed with : "+ str(e),
+            "Sentinel could not check the certificate.",
+            "Check that the site accept HTTPS connection on port: "+ str(port)+".",
 
-    print("Status code:", response.status_code)
-    print("Final URL:", response.url)
+        )]
 
-    findings = []
-    findings += check_security_headers(response.headers)
-    findings += check_hsts_quality(response.headers)
-    findings += check_cookies(get_cookie_lines(response))
-    findings.sort(key=severity_rank)
+    expiry_seconds = ssl.cert_time_to_seconds(cert["notAfter"])
+    days_left= int((expiry_seconds-time.time())/86400)
 
+    issuer={}
+    for item in cert["issuer"]:
+        for key,value in item:
+            issuer[key]=value
+    issuer_name= issuer.get("organizationName","unkown")
+
+    findings=[]
+    if days_left<14:
+        findings.append(make_finding(
+            "Certificate expires very soon",
+            "High",
+            "The certificate expires in " + str(days_left)+" days.",
+            "After expiry, browser will block visitors with a warning.",
+            "Renew the certificate npw, and consider automatic renewal.",
+        ))
+    elif days_left<30:
+         findings.append(make_finding(
+            "Certificate expires soon",
+            "Medium",
+            "The certificate expires in " + str(days_left) + " days.",
+            "If it is not renewed, visitors will see a warning.",
+            "Plan the renewal, and consider automatic renewal.",
+        ))
+    findings.append(make_finding(
+        "TLS summary",
+        "Info",
+        "Protocol: " + version + ". Issuer: " + issuer_name + ". Expires in " + str(days_left) + " days.",
+        "Information only.",
+        "No action needed.",
+    ))
+    return findings
+
+
+def print_findings(findings):
     if not findings:
         print("No findings.")
     for f in findings:
@@ -181,6 +243,28 @@ def run_scan(url):
         print("Impact:", f["impact"])
         print("Fix:", f["fix"])
 
+def run_scan(url):
+    response = fetch(url)
+
+    if response is None:
+        print("Could not fetch the page.")
+        if url.startswith("https://"):
+            print("Checking the TLS certificate only.")
+            findings = check_tls(url)
+            findings.sort(key=severity_rank)
+            print_findings(findings)
+        return
+
+    print("Status code:", response.status_code)
+    print("Final URL:", response.url)
+
+    findings = []
+    findings += check_security_headers(response.headers)
+    findings += check_hsts_quality(response.headers)
+    findings += check_cookies(get_cookie_lines(response))
+    findings += check_tls(response.url)
+    findings.sort(key=severity_rank)
+    print_findings(findings)
 
 def validate_url(raw):
     raw=raw.strip()
@@ -220,6 +304,3 @@ def main():
 
 if __name__ =="__main__":
     main()
-
-print(validate_url("github.com"))
-print(validate_url("ftp://x.com"))
