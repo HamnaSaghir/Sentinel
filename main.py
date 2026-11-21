@@ -1,4 +1,5 @@
 import requests
+from urllib.parse import urlparse
 
 ONE_YEAR = 31536000
 SEVERITY_ORDER = {"High": 0, "Medium": 1, "Low": 2}
@@ -180,7 +181,45 @@ def run_scan(url):
         print("Impact:", f["impact"])
         print("Fix:", f["fix"])
 
-if __name__ == "__main__":
-    run_scan("https://github.com")
-fake = {"Content-Security-Policy": "frame-ancestors 'none'"}
-print([f["issue"] for f in check_security_headers(fake)])
+
+def validate_url(raw):
+    raw=raw.strip()
+    if raw=="":
+        return None, " The url is empty. "
+    if " " in raw:
+        return None, "The URL contains spaces."
+    if"://" not in raw:
+        raw= "https://"+ raw
+
+    parsed = urlparse(raw)
+    if parsed.scheme not in ("http", "https"):
+        return None, "Only http and https URLs are allowed."
+    if not parsed.hostname:
+        return None, " The URL has no website name."
+    try:
+        parsed.port
+    except ValueError:
+        return None, " The port number is not valid."
+    return raw,None
+
+def ask_permission(url):
+    print("Target: ",url)
+    answer =input("Do you have permission to scan this site? (yes/no): ")
+    return answer.strip().lower() == "yes"
+
+def main():
+    raw = input("Enter the website to scan:")
+    url,error= validate_url(raw)
+    if error:
+        print("Invalidate URL : ", error)
+        return
+    if not ask_permission(url):
+         print("Scan cancelled. Only scan sites you have permission to test.")
+         return
+    run_scan(url)
+
+if __name__ =="__main__":
+    main()
+
+print(validate_url("github.com"))
+print(validate_url("ftp://x.com"))
